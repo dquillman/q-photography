@@ -1,14 +1,43 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, CreditCard, CheckCircle, Trash2 } from 'lucide-react';
+import { ArrowLeft, CreditCard, CheckCircle, Trash2, Tag } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { validateDiscountCode, calculateDiscount, type DiscountCode } from '../data/discounts';
 
 const Checkout = () => {
     const [step, setStep] = useState<'cart' | 'details' | 'success'>('cart');
+    const [promoCode, setPromoCode] = useState('');
+    const [appliedDiscount, setAppliedDiscount] = useState<DiscountCode | null>(null);
+    const [promoError, setPromoError] = useState('');
+    const [email, setEmail] = useState('');
+    const [emailError, setEmailError] = useState('');
     const { items, total, removeFromCart, clearCart } = useCart();
+
+    const validateEmail = (email: string) => {
+        return /\S+@\S+\.\S+/.test(email);
+    };
+
+    const applyPromoCode = () => {
+        setPromoError('');
+        const result = validateDiscountCode(promoCode, total);
+
+        if (result.valid && result.discount) {
+            setAppliedDiscount(result.discount);
+            setPromoCode('');
+        } else {
+            setPromoError(result.error || 'Invalid code');
+        }
+    };
+
+    const discountAmount = appliedDiscount ? calculateDiscount(appliedDiscount, total) : 0;
+    const finalTotal = total - discountAmount;
 
     const handlePayment = (e: React.FormEvent) => {
         e.preventDefault();
+        if (!validateEmail(email)) {
+            setEmailError('Please enter a valid email address.');
+            return;
+        }
         setStep('success');
         clearCart();
     };
@@ -64,12 +93,14 @@ const Checkout = () => {
                                         <img src={item.image} alt={item.title} style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '4px' }} />
                                         <div>
                                             <h3 className="card-title">{item.title}</h3>
-                                            <p className="text-secondary" style={{ fontSize: '0.875rem' }}>Qty: {item.quantity}</p>
+                                            <p className="text-secondary" style={{ fontSize: '0.875rem' }}>
+                                                Size: {item.size}" | Qty: {item.quantity}
+                                            </p>
                                         </div>
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                        <span className="card-title">${item.price * item.quantity}</span>
-                                        <button onClick={() => removeFromCart(item.id)} className="text-secondary hover:text-accent">
+                                        <span className="card-title">${(item.price * item.quantity).toFixed(2)}</span>
+                                        <button onClick={() => removeFromCart(item.id, item.size)} className="text-secondary hover:text-accent">
                                             <Trash2 size={18} />
                                         </button>
                                     </div>
@@ -77,18 +108,84 @@ const Checkout = () => {
                             ))}
                         </div>
 
+                        {/* Promo Code Section */}
+                        <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--color-border)' }}>
+                            <h3 className="card-title" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <Tag size={20} />
+                                Promo Code
+                            </h3>
+                            {appliedDiscount ? (
+                                <div style={{
+                                    padding: '1rem',
+                                    background: 'rgba(16, 185, 129, 0.1)',
+                                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                                    borderRadius: '0.5rem',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center'
+                                }}>
+                                    <div>
+                                        <div className="card-title" style={{ color: 'var(--color-success)', marginBottom: '0.25rem' }}>
+                                            {appliedDiscount.code} Applied!
+                                        </div>
+                                        <div className="text-secondary" style={{ fontSize: '0.875rem' }}>
+                                            {appliedDiscount.type === 'percentage' ? `${appliedDiscount.value}% off` : `$${appliedDiscount.value} off`}
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setAppliedDiscount(null)}
+                                        className="text-secondary hover:text-primary"
+                                        style={{ fontSize: '0.875rem' }}
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            ) : (
+                                <div>
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <input
+                                            type="text"
+                                            value={promoCode}
+                                            onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                                            placeholder="Enter code"
+                                            className="form-input"
+                                            style={{ flex: 1 }}
+                                        />
+                                        <button
+                                            onClick={applyPromoCode}
+                                            className="btn btn-secondary"
+                                            disabled={!promoCode.trim()}
+                                        >
+                                            Apply
+                                        </button>
+                                    </div>
+                                    {promoError && (
+                                        <p style={{ color: '#ef4444', fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                                            {promoError}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
                         <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--color-border)' }}>
                             <div className="flex-between text-secondary mb-md">
                                 <span>Subtotal</span>
-                                <span>${total}</span>
+                                <span>${total.toFixed(2)}</span>
                             </div>
+                            {appliedDiscount && discountAmount > 0 && (
+                                <div className="flex-between mb-md" style={{ color: 'var(--color-success)' }}>
+                                    <span>Discount ({appliedDiscount.code})</span>
+                                    <span>-${discountAmount.toFixed(2)}</span>
+                                </div>
+                            )}
                             <div className="flex-between text-secondary mb-md">
                                 <span>Shipping</span>
                                 <span>Free</span>
                             </div>
                             <div className="flex-between card-title text-primary" style={{ fontSize: '1.5rem', marginTop: '1rem' }}>
                                 <span>Total</span>
-                                <span>${total}</span>
+                                <span>${finalTotal.toFixed(2)}</span>
                             </div>
                         </div>
                     </div>
@@ -98,8 +195,31 @@ const Checkout = () => {
                 <div>
                     <h2 className="section-title">Payment Details</h2>
 
+                    <div className="form-group mb-lg">
+                        <label className="form-label">Email Address</label>
+                        <input
+                            type="email"
+                            className="form-input"
+                            placeholder="you@example.com"
+                            value={email}
+                            onChange={(e) => {
+                                setEmail(e.target.value);
+                                if (emailError) setEmailError('');
+                            }}
+                            required
+                        />
+                        {emailError && <p className="text-red-500 text-sm mt-1">{emailError}</p>}
+                    </div>
+
                     <button
-                        onClick={() => { setStep('success'); clearCart(); }}
+                        onClick={() => {
+                            if (!validateEmail(email)) {
+                                setEmailError('Please enter a valid email address to receive your confirmation.');
+                                return;
+                            }
+                            setStep('success');
+                            clearCart();
+                        }}
                         className="btn"
                         style={{
                             width: '100%',
@@ -109,7 +229,8 @@ const Checkout = () => {
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            gap: '0.5rem'
+                            gap: '0.5rem',
+                            border: '1px solid #e2e8f0'
                         }}
                     >
                         <svg viewBox="0 0 24 24" className="w-6 h-6" style={{ width: '24px', height: '24px' }} fill="currentColor">
@@ -128,10 +249,7 @@ const Checkout = () => {
                     </div>
 
                     <form className="space-y-4" onSubmit={handlePayment}>
-                        <div className="form-group">
-                            <label className="form-label">Email</label>
-                            <input type="email" className="form-input" placeholder="you@example.com" required />
-                        </div>
+
 
                         <div className="form-group">
                             <label className="form-label">Card Information</label>

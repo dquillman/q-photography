@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom';
-import { ShoppingBag, Camera } from 'lucide-react';
+import { ShoppingBag, Camera, Heart } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { useFavorites } from '../context/FavoritesContext';
 import { APP_VERSION } from '../version';
 
 const Navbar = () => {
     const { count } = useCart();
+    const { favorites } = useFavorites();
 
     return (
         <nav style={{ borderBottom: '1px solid var(--color-border)', padding: '1.5rem 0' }}>
@@ -18,6 +20,12 @@ const Navbar = () => {
                 </Link>
 
                 <div className="flex-center" style={{ gap: '2rem' }}>
+                    <Link to="/about" className="text-secondary hover:text-primary transition-colors">About</Link>
+                    <Link to="/blog" className="text-secondary hover:text-primary transition-colors">Blog</Link>
+                    <Link to="/favorites" className="text-secondary hover:text-primary transition-colors flex-center" style={{ gap: '0.5rem' }}>
+                        <Heart size={18} />
+                        Favorites {favorites.length > 0 && `(${favorites.length})`}
+                    </Link>
                     <Link to="/admin" className="text-secondary hover:text-primary transition-colors">Admin</Link>
                     <Link to="/checkout" className="btn btn-primary" style={{ padding: '0.5rem 1rem' }}>
                         <ShoppingBag size={18} />

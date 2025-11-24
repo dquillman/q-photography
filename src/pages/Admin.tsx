@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Save, Loader, Wand2, AlertCircle, Trash2, Settings } from 'lucide-react';
-import { PHOTOS, Photo } from '../data/photos';
+import { Save, Loader, Wand2, AlertCircle, Trash2, Settings, Pencil, X } from 'lucide-react';
+import { PHOTOS, Photo } from '../data/photos_final';
 import WallView from '../components/WallView';
 
 const Admin = () => {
@@ -9,14 +9,27 @@ const Admin = () => {
     const [title, setTitle] = useState('');
     const [price, setPrice] = useState('');
     const [description, setDescription] = useState('');
+    const [category, setCategory] = useState('Landscape'); // Default category
+    const [isBW, setIsBW] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [photos, setPhotos] = useState<Photo[]>(PHOTOS);
     const [showRoomEditor, setShowRoomEditor] = useState(false);
+    const [editingId, setEditingId] = useState<number | null>(null);
 
     useEffect(() => {
         const savedKey = localStorage.getItem('gemini_api_key');
         if (savedKey) setApiKey(savedKey);
+
+        // Fetch latest photos from server to ensure sync
+        fetch('/api/get-photos')
+            .then(res => res.json())
+            .then(data => {
+                if (Array.isArray(data)) {
+                    setPhotos(data);
+                }
+            })
+            .catch(err => console.error('Failed to fetch photos:', err));
     }, []);
 
     const saveApiKey = () => {
@@ -81,6 +94,27 @@ const Admin = () => {
         }
     };
 
+    const handleEdit = (photo: Photo) => {
+        setEditingId(photo.id);
+        setTitle(photo.title);
+        setPrice(photo.price.toString());
+        setDescription(photo.description);
+        setCategory(photo.category || 'Landscape');
+        setIsBW(photo.isBW || false);
+        setImageUrl(photo.url);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const cancelEdit = () => {
+        setEditingId(null);
+        setTitle('');
+        setPrice('');
+        setDescription('');
+        setCategory('Landscape');
+        setIsBW(false);
+        setImageUrl('');
+    };
+
     const saveToSite = async () => {
         if (!title || !imageUrl || !price) {
             setError('Please fill in all fields.');
@@ -94,15 +128,50 @@ const Admin = () => {
 
         setLoading(true);
         try {
-            const newPhoto: Photo = {
-                id: Date.now(),
-                title,
-                url: imageUrl,
-                price: Number(price),
-                description
-            };
+            let updatedPhotos;
 
-            const updatedPhotos = [...photos, newPhoto];
+            if (editingId) {
+                // Update existing photo
+                const basePrice = Number(price);
+                updatedPhotos = photos.map(p =>
+                    p.id === editingId
+                        ? {
+                            ...p,
+                            title,
+                            url: imageUrl,
+                            price: basePrice,
+                            description,
+                            category,
+                            isBW,
+                            sizes: [
+                                { size: "8x10", price: basePrice, description: "Perfect for desks & shelves" },
+                                { size: "16x20", price: Math.round(basePrice * 1.6), description: "Statement piece" },
+                                { size: "24x36", price: Math.round(basePrice * 2.8), description: "Gallery quality" },
+                                { size: "30x40", price: Math.round(basePrice * 3.9), description: "Premium large format" }
+                            ]
+                        }
+                        : p
+                );
+            } else {
+                // Create new photo with auto-generated sizes
+                const basePrice = Number(price);
+                const newPhoto: Photo = {
+                    id: Date.now(),
+                    title,
+                    url: imageUrl,
+                    price: basePrice,
+                    sizes: [
+                        { size: "8x10", price: basePrice, description: "Perfect for desks & shelves" },
+                        { size: "16x20", price: Math.round(basePrice * 1.6), description: "Statement piece" },
+                        { size: "24x36", price: Math.round(basePrice * 2.8), description: "Gallery quality" },
+                        { size: "30x40", price: Math.round(basePrice * 3.9), description: "Premium large format" }
+                    ],
+                    description,
+                    category,
+                    isBW
+                };
+                updatedPhotos = [...photos, newPhoto];
+            }
 
             const response = await fetch('/api/save-photos', {
                 method: 'POST',
@@ -113,13 +182,10 @@ const Admin = () => {
             if (!response.ok) throw new Error('Failed to save.');
 
             setPhotos(updatedPhotos);
-            alert('Photo saved successfully!');
+            alert(editingId ? 'Photo updated successfully!' : 'Photo saved successfully!');
 
             // Reset form
-            setTitle('');
-            setPrice('');
-            setImageUrl('');
-            setDescription('');
+            cancelEdit();
         } catch (err) {
             setError('Failed to save photo to disk.');
         } finally {
@@ -207,7 +273,14 @@ const Admin = () => {
                     </div>
 
                     <div className="p-4 bg-surface rounded-lg border border-white/10">
-                        <h3 className="card-title mb-4">New Photo Details</h3>
+                        <div className="flex-between mb-4">
+                            <h3 className="card-title">{editingId ? 'Edit Photo' : 'New Photo Details'}</h3>
+                            {editingId && (
+                                <button onClick={cancelEdit} className="text-secondary hover:text-white flex-center gap-1 text-sm">
+                                    <X size={16} /> Cancel
+                                </button>
+                            )}
+                        </div>
 
                         <div className="form-group">
                             <label className="form-label">Title</label>
@@ -218,6 +291,33 @@ const Admin = () => {
                                 onChange={(e) => setTitle(e.target.value)}
                                 placeholder="e.g. Sunset Boulevard"
                             />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Category</label>
+                            <select
+                                className="form-input"
+                                value={category}
+                                onChange={(e) => setCategory(e.target.value)}
+                            >
+                                <option value="Landscape">Landscape</option>
+                                <option value="Urban">Urban</option>
+                                <option value="Nature">Nature</option>
+                                <option value="Portrait">Portrait</option>
+                                <option value="Abstract">Abstract</option>
+                            </select>
+                        </div>
+
+                        <div className="form-group">
+                            <label className="flex-center" style={{ gap: '0.5rem', cursor: 'pointer', userSelect: 'none', justifyContent: 'flex-start' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={isBW}
+                                    onChange={(e) => setIsBW(e.target.checked)}
+                                    style={{ cursor: 'pointer', width: '18px', height: '18px' }}
+                                />
+                                <span className="form-label" style={{ marginBottom: 0 }}>Black & White</span>
+                            </label>
                         </div>
 
                         <div className="form-group">
@@ -307,7 +407,7 @@ const Admin = () => {
                                 className="btn btn-primary flex-1"
                             >
                                 <Save size={20} />
-                                Save to Site
+                                {editingId ? 'Update Photo' : 'Save to Site'}
                             </button>
                         </div>
                     </div>
@@ -343,7 +443,14 @@ const Admin = () => {
                                     alt={photo.title}
                                     className="w-full h-full object-cover"
                                 />
-                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                    <button
+                                        onClick={() => handleEdit(photo)}
+                                        className="p-3 bg-blue-500/80 hover:bg-blue-500 text-white rounded-full transition-colors"
+                                        title="Edit Photo"
+                                    >
+                                        <Pencil size={20} />
+                                    </button>
                                     <button
                                         onClick={() => handleDelete(photo.id, photo.url)}
                                         className="p-3 bg-red-500/80 hover:bg-red-500 text-white rounded-full transition-colors"
@@ -355,7 +462,10 @@ const Admin = () => {
                             </div>
                             <div className="p-3">
                                 <h4 className="font-medium truncate">{photo.title}</h4>
-                                <p className="text-secondary text-sm">${photo.price}</p>
+                                <div className="flex-between text-sm text-secondary">
+                                    <span>${photo.price}</span>
+                                    <span>{photo.category}</span>
+                                </div>
                             </div>
                         </div>
                     ))}

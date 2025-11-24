@@ -18,15 +18,32 @@ const savePhotoPlugin = () => ({
         req.on('end', () => {
           try {
             const photos = JSON.parse(body)
-            const filePath = path.resolve(__dirname, 'src/data/photos.ts')
+            const filePath = path.resolve(__dirname, 'src/data/photos_final.ts')
 
             // Create the file content
-            const content = `export interface Photo {
+            // Create the file content
+            const content = `// ⚠️ WARNING: DO NOT DELETE THESE INTERFACES ⚠️
+// Use the Admin page at /admin to add photos instead of editing this file manually
+
+export interface PrintSize {
+    size: string;
+    price: number;
+    description?: string;
+}
+
+export interface Photo {
     id: number;
     title: string;
     url: string;
     price: number;
+    sizes: PrintSize[];        // REQUIRED
+    edition?: {                // OPTIONAL
+        total: number;
+        remaining: number;
+    };
     description: string;
+    category?: string;         // REQUIRED
+    isBW?: boolean;           // REQUIRED
 }
 
 export const PHOTOS: Photo[] = ${JSON.stringify(photos, null, 4)};
@@ -40,6 +57,27 @@ export const PHOTOS: Photo[] = ${JSON.stringify(photos, null, 4)};
             res.end(JSON.stringify({ error: 'Failed to save photos' }))
           }
         })
+      } else if (req.url === '/api/get-photos' && req.method === 'GET') {
+        try {
+          const filePath = path.resolve(__dirname, 'src/data/photos_final.ts')
+          if (fs.existsSync(filePath)) {
+            const content = fs.readFileSync(filePath, 'utf-8')
+            // Extract the JSON array from the file content
+            const match = content.match(/export const PHOTOS: Photo\[] = (\[[\s\S]*?]);/)
+            if (match && match[1]) {
+              res.setHeader('Content-Type', 'application/json')
+              res.end(match[1])
+            } else {
+              throw new Error('Could not parse photos from file')
+            }
+          } else {
+            res.end('[]')
+          }
+        } catch (err) {
+          console.error(err)
+          res.statusCode = 500
+          res.end(JSON.stringify({ error: 'Failed to get photos' }))
+        }
       } else if (req.url === '/api/save-rooms' && req.method === 'POST') {
         let body = ''
         req.on('data', chunk => body += chunk)
